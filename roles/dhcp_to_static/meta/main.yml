@@ -1,0 +1,28 @@
+---
+dependencies: []
+galaxy_info:
+  author: rushwilt
+  description: >-
+    Detects interfaces whose configuration was issued by a DHCP server and
+    rewrites it as static, keeping the currently assigned address, prefix,
+    default gateway, DNS and NTP servers.  Supports the latest Debian
+    (ifupdown, NetworkManager), Ubuntu (netplan, NetworkManager) and
+    Raspberry Pi OS (dhcpcd) setups.
+  license: Apache-2.0
+  min_ansible_version: '2.20'
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+    - name: Ubuntu
+      versions:
+        - '24.04'
+        - '26.04'
+  tags:
+    - networking
+    - dhcp
+    - static
+    - debian
+    - ubuntu
+    - raspberry-pi

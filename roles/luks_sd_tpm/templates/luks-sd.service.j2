@@ -1,0 +1,11 @@
+[Unit]
+Description=Unlock the SD card LUKS volume with the board TPM (clevis tpm2)
+Before=data.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/bin/clevis luks unlock -n {{ rushwilt_luks_sd_mapper }} -d /dev/disk/by-partuuid/{{ luks_sd_partuuid.stdout }}
+
+[Install]
+WantedBy=local-fs.target

@@ -1,0 +1,88 @@
+---
+# rushwilt.pi.tpm
+#
+# Brings up the Raspberry Pi SPI TPM 2.0 module (Infineon SLB 967x
+# family, driven by the kernel tpm_tis_spi driver):
+#   * ensures dtparam=spi=on and dtoverlay=tpm-slb9670 in the boot
+#     configuration, which the firmware applies on the next boot,
+#   * installs tpm2-tools,
+#   * verifies the chip answers on /dev/tpm0 and reports its firmware.
+#
+# Boards without a TPM module come back as a clean no-op.
+
+- name: Detect the TPM state
+  ansible.builtin.import_tasks: detect.yml
+
+- name: No TPM support on this host
+  ansible.builtin.debug:
+    msg: >-
+      rushwilt.pi.tpm: {{ rushwilt_tpm_unsupported_reason }}
+      Nothing to do.
+  when: not rushwilt_tpm_supported
+
+- name: Configure the SPI TPM (Raspberry Pi)
+  ansible.builtin.include_tasks: configure.yml
+  when: rushwilt_tpm_supported
+
+- name: Verify the TPM is live
+  ansible.builtin.include_tasks: verify.yml
+  when:
+    - rushwilt_tpm_supported
+    - rushwilt_tpm_present
+
+- name: Report a live TPM
+  ansible.builtin.debug:
+    msg: >-
+      TPM online on /dev/tpm0, firmware
+      {{ rushwilt_tpm_firmware }}.
+  when:
+    - rushwilt_tpm_supported
+    - rushwilt_tpm_present
+
+- name: Report the pending reboot
+  ansible.builtin.debug:
+    msg: >-
+      {{ rushwilt_tpm_config }} now enables the SPI TPM
+      (dtparam={{ rushwilt_tpm_dtparam }},
+      dtoverlay={{ rushwilt_tpm_dtoverlay }});
+      tpm2-tools installed.
+      Reboot the board and re-run the play to verify the TPM.
+  when:
+    - rushwilt_tpm_supported
+    - rushwilt_tpm_reboot_pending
+
+- name: Collect the last TPM and SPI kernel messages
+  ansible.builtin.shell:
+    cmd: dmesg | grep -iE 'tpm|spi' | tail -n 30
+  register: tpm_dmesg
+  changed_when: false
+  failed_when: false
+  when:
+    - rushwilt_tpm_supported
+    - not rushwilt_tpm_present
+    - not rushwilt_tpm_reboot_pending
+
+- name: Report a missing TPM module
+  ansible.builtin.debug:
+    msg: >-
+      The boot configuration enables the SPI TPM
+      (dtparam={{ rushwilt_tpm_dtparam }},
+      dtoverlay={{ rushwilt_tpm_dtoverlay }}) but /dev/tpm0 does not
+      exist. Either this board has no TPM module wired, or the SPI
+      link is faulty. Last TPM/SPI kernel messages:
+      {{ tpm_dmesg.stdout_lines | join(' | ') }}
+  when:
+    - rushwilt_tpm_supported
+    - not rushwilt_tpm_present
+    - not rushwilt_tpm_reboot_pending
+
+- name: Fail when a TPM is expected on this board
+  ansible.builtin.fail:
+    msg: >-
+      This board is expected to carry a TPM module
+      but no TPM answers on /dev/tpm0.
+  when:
+    - rushwilt_tpm_supported
+    - not rushwilt_tpm_present
+    - not rushwilt_tpm_reboot_pending
+    - rushwilt_tpm_fail_if_absent | bool

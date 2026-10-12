@@ -1,0 +1,22 @@
+---
+# Ubuntu: rewrite the `dhcp4: true` stanzas of the netplan documents as
+# static.  The documents are re-serialised, so free-form comments inside a
+# rewritten file do not survive (other files are left byte-for-byte alone).
+
+- name: Rewrite the DHCP stanzas as static in the netplan documents
+  ansible.builtin.set_fact:
+    netplan_docs: >-
+      {{ netplan_docs | combine({ item.key: item.value | rushwilt.pi.netplan_static(dhcp_to_static_leases, resolv.servers, resolv.search) }) }}
+  loop: "{{ netplan_docs | dict2items }}"
+  when: item.key in netplan_target_files
+
+- name: Write the static netplan files
+  ansible.builtin.copy:
+    dest: "{{ item.key }}"
+    content: "{{ item.value | to_nice_yaml }}"
+    owner: root
+    group: root
+    mode: '0600'
+    backup: true
+  loop: "{{ netplan_docs | dict2items | selectattr('key', 'in', netplan_target_files) | list }}"
+  notify: Apply the netplan configuration

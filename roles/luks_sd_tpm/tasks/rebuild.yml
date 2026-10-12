@@ -1,0 +1,128 @@
+---
+# Wipe the SD card and create the LUKS volume fresh:
+#   * one GPT partition on the card,
+#   * a LUKS2 volume whose keyslot key is a strong random 64-byte
+#     string from /dev/urandom,
+#   * a clevis tpm2 binding that seals that key to the board TPM
+#     under a PCR policy, leaving no other keyslot, so the volume
+#     can only be unlocked on this board.
+# The key material only ever exists in /run (tmpfs) and is shredded
+# after the binding is in place.
+
+- name: Unmount the mountpoint if mounted
+  ansible.builtin.shell:
+    cmd: while mountpoint -q {{ rushwilt_luks_sd_mountpoint }}; do umount {{ rushwilt_luks_sd_mountpoint }} || break; done
+  when: rushwilt_luks_sd_mounted
+  changed_when: true
+
+- name: Close the LUKS mapper if open
+  ansible.builtin.shell:
+    cmd: cryptsetup close /dev/mapper/{{ rushwilt_luks_sd_mapper }}
+  when: rushwilt_luks_sd_open
+  changed_when: true
+
+- name: Record the active mount sources
+  ansible.builtin.shell:
+    cmd: awk '{print $1}' /proc/mounts
+  register: active_mount_sources
+  changed_when: false
+
+- name: Abort if anything is mounted from the SD card
+  ansible.builtin.fail:
+    msg: >-
+      {{ active_mount_sources.stdout_lines
+         | select('match', '^' ~ rushwilt_luks_sd_device ~ '$|^' ~ rushwilt_luks_sd_device ~ 'p[0-9]+$')
+         | list }}
+      is a mount source;
+      refusing to wipe {{ rushwilt_luks_sd_device }}.
+  when: >-
+    active_mount_sources.stdout_lines
+    | select('match', '^' ~ rushwilt_luks_sd_device ~ '$|^' ~ rushwilt_luks_sd_device ~ 'p[0-9]+$')
+    | list
+    | length > 0
+
+- name: Wipe all filesystem and partition signatures from the card
+  ansible.builtin.shell:
+    cmd: wipefs -a {{ rushwilt_luks_sd_device }}
+  changed_when: true
+
+- name: Create the GPT partition table with one primary partition
+  ansible.builtin.shell:
+    cmd: parted -s {{ rushwilt_luks_sd_device }} mklabel gpt mkpart primary 1MiB 100%
+  changed_when: true
+
+- name: Wait for the kernel to expose the new partition
+  ansible.builtin.shell:
+    cmd: >-
+      partprobe {{ rushwilt_luks_sd_device }} 2>/dev/null || true;
+      for i in $(seq 40); do
+        [ -b {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }} ] && exit 0;
+        sleep 0.5;
+      done;
+      exit 1
+  changed_when: false
+
+- name: Generate the 64-byte random LUKS key
+  ansible.builtin.shell:
+    cmd: >-
+      head -c {{ rushwilt_luks_sd_key_bytes }} /dev/urandom > /run/rushwilt-luks-sd.key &&
+      chmod 0600 /run/rushwilt-luks-sd.key &&
+      base64 -w0 < /run/rushwilt-luks-sd.key > /run/rushwilt-luks-sd.key.b64
+  changed_when: true
+
+- name: Format the LUKS2 volume with the random key
+  ansible.builtin.shell:
+    cmd: >-
+      cryptsetup luksFormat --batch-mode --type luks2 -s 512
+      --key-file /run/rushwilt-luks-sd.key.b64
+      {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  changed_when: true
+
+- name: Seal the key to the TPM and register it as the LUKS token
+  ansible.builtin.shell:
+    cmd: >-
+      jwe="$(clevis encrypt tpm2
+      '{"key":"ecc","hash":"sha256","pcr_bank":"sha256","pcr_ids":"{{ rushwilt_luks_sd_pcrs }}"}'
+      < /run/rushwilt-luks-sd.key.b64)" &&
+      jose jwe fmt --input="${jwe}" > /run/rushwilt-luks-sd.jwe.json &&
+      printf '{"type":"clevis","keyslots":["0"],"jwe":%s}'
+      "$(cat /run/rushwilt-luks-sd.jwe.json)" |
+      cryptsetup token import {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  changed_when: true
+
+- name: Shred the key material
+  ansible.builtin.shell:
+    cmd: shred -u /run/rushwilt-luks-sd.key /run/rushwilt-luks-sd.key.b64 /run/rushwilt-luks-sd.jwe.json
+  changed_when: true
+
+- name: Verify the clevis tpm2 binding is in place
+  ansible.builtin.shell:
+    cmd: clevis luks list -d {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  register: luks_sd_new_bindings
+  changed_when: false
+
+- name: Abort unless the new binding is a tpm2 binding
+  ansible.builtin.assert:
+    that:
+      - luks_sd_new_bindings.rc == 0
+      - "'tpm2' in luks_sd_new_bindings.stdout"
+    fail_msg: >-
+      The LUKS volume was created but no clevis tpm2 binding could be
+      verified on it.
+    quiet: true
+
+- name: Open the volume through the TPM
+  ansible.builtin.shell:
+    cmd: clevis luks unlock -n {{ rushwilt_luks_sd_mapper }} -d {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  changed_when: true
+
+- name: Create the filesystem inside the volume
+  ansible.builtin.shell:
+    cmd: mkfs.{{ rushwilt_luks_sd_fs }} -q /dev/mapper/{{ rushwilt_luks_sd_mapper }}
+  changed_when: true
+
+- name: Record the filesystem UUID
+  ansible.builtin.shell:
+    cmd: blkid -s UUID -o value /dev/mapper/{{ rushwilt_luks_sd_mapper }}
+  register: luks_sd_fs_uuid
+  changed_when: false

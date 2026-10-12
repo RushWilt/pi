@@ -1,0 +1,15 @@
+# build artifacts
+*.tar
+
+# caches / test state
+.cache/
+.pytest_cache/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# editors / OS
+*.swp
+*~
+.DS_Store

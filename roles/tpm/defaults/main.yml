@@ -1,0 +1,17 @@
+---
+# Firmware settings that bring the SPI TPM 2.0 module online.  The
+# overlay name must exist in the running kernel's device-tree overlay
+# tree (checked in tasks/detect.yml); on the current Raspberry Pi
+# kernels that is tpm-slb9670, which drives the Infineon SLB 967x SPI
+# chips through the kernel's tpm_tis_spi driver.
+rushwilt_tpm_dtparam: spi=on
+rushwilt_tpm_dtoverlay: tpm-slb9670
+
+# Userspace package that provides the tpm2_* commands.
+rushwilt_tpm_packages:
+  - tpm2-tools
+
+# Fail the play when this board is expected to carry a TPM module but
+# no TPM answers on /dev/tpm0 once the configuration is in place.
+# Boards that simply do not have a module fitted are reported instead.
+rushwilt_tpm_fail_if_absent: false

@@ -1,0 +1,20 @@
+---
+namespace: rushwilt
+name: pi
+version: 1.0.0
+readme: README.md
+authors:
+  - rushwilt
+description: >-
+  Roles for provisioning FreshPi-managed Raspberry Pis: convert
+  DHCP-managed interfaces to static configuration, bring up the
+  on-board SPI TPM 2.0 module, and provide the SD card as a LUKS
+  data volume that only the board's own TPM can unseal.
+license:
+  - Apache-2.0
+repository: https://github.com/rushwilt/pi
+tags:
+  - raspberry-pi
+  - networking
+  - security
+  - storage

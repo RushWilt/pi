@@ -1,0 +1,24 @@
+---
+# systemd-timesyncd: DHCP hands NTP servers to the system time service, not
+# to the network stack, so once the interfaces go static those servers would
+# be lost.  Pin the ones currently delivered over the link into a timesyncd
+# drop-in.  This is system-wide and backend-agnostic; it runs only when the
+# time service actually received NTP from the network.
+
+- name: Ensure the timesyncd drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/timesyncd.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Pin the DHCP-provided NTP servers into systemd-timesyncd
+  ansible.builtin.copy:
+    dest: /etc/systemd/timesyncd.conf.d/rushwilt-dhcp-to-static.conf
+    content: "[Time]\nNTP={{ ntp_servers | join(' ') }}\n"
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  notify: Restart systemd-timesyncd

@@ -1,0 +1,30 @@
+---
+dependencies:
+  - rushwilt.pi.tpm
+galaxy_info:
+  author: rushwilt
+  description: >-
+    Provides the SD card as a LUKS volume that can only be unlocked
+    through the board TPM, mounted at /data.  The LUKS keyslot key is a
+    strong random 64-byte string; its only copy is sealed to the TPM
+    with a clevis tpm2 binding under a PCR policy, so a card that
+    cannot be unsealed on this board (new hardware, lost binding) is
+    wiped and created fresh.  Boot unlock is wired through a oneshot
+    unit and fstab.
+  license: Apache-2.0
+  min_ansible_version: '2.20'
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+    - name: Ubuntu
+      versions:
+        - '24.04'
+        - '26.04'
+  tags:
+    - luks
+    - encryption
+    - tpm
+    - storage
+    - raspberry-pi

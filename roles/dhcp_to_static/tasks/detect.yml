@@ -1,0 +1,239 @@
+---
+# Work out which interfaces a DHCP server actually configures on this host,
+# via which backend, and what the live lease says.
+
+- name: Refuse check mode
+  ansible.builtin.fail:
+    msg: >-
+      This role must apply for real: it rewrites network configuration and
+      verifies the result, so it cannot be previewed. Run without --check.
+  when: ansible_check_mode | default(false)
+
+- name: Assert a supported distribution
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+      - >-
+        ansible_facts['distribution_version'].split('.') | map('int') | list
+        >= (dhcp_to_static_min_debian
+            if ansible_facts['distribution'] == 'Debian'
+            else dhcp_to_static_min_ubuntu)
+    fail_msg: >-
+      rushwilt.pi.dhcp_to_static supports the latest Debian
+      ({{ dhcp_to_static_min_debian | join('.') }} and later), Ubuntu
+      ({{ dhcp_to_static_min_ubuntu | join('.') }} and later) and the current
+      Debian-based Raspberry Pi OS.
+      This host reports
+      {{ ansible_facts['distribution'] }}
+      {{ ansible_facts['distribution_version'] }}.
+
+- name: Refuse to run unprivileged
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['user_id'] == 'root'
+    fail_msg: >-
+      This role rewrites /etc network configuration;
+      run the play with become: true.
+
+- name: Collect the live IPv4 addresses
+  ansible.builtin.command:
+    cmd: ip -j -4 addr show
+  register: ip_addr_json
+  changed_when: false
+
+- name: Collect the main routing table
+  ansible.builtin.command:
+    cmd: ip -j route show table main
+  register: ip_route_json
+  changed_when: false
+
+- name: Index the live leases by interface
+  ansible.builtin.set_fact:
+    dhcp_to_static_leases: >-
+      {{ ip_addr_json.stdout | from_json | rushwilt.pi.lease_index(ip_route_json.stdout | from_json) }}
+
+- name: Look for the resolver configuration
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+  register: resolv_stat
+
+- name: Read the resolver configuration
+  ansible.builtin.slurp:
+    path: /etc/resolv.conf
+  register: resolv_raw
+  when: resolv_stat.stat.exists
+
+- name: Index the current DNS servers and search domains
+  ansible.builtin.set_fact:
+    resolv: >-
+      {{ (resolv_raw.content | default('')) | b64decode | rushwilt.pi.resolv_index }}
+
+- name: Look for the netplan configuration (Ubuntu)
+  ansible.builtin.stat:
+    path: /etc/netplan
+  register: netplan_dir
+
+- name: Find the netplan files
+  ansible.builtin.find:
+    paths: /etc/netplan
+    patterns: '*.y*ml'
+  register: netplan_find
+  when: netplan_dir.stat.exists
+
+- name: Read the netplan files
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ netplan_find.files | default([]) | map(attribute='path') | list }}"
+  register: netplan_raw
+  when: netplan_dir.stat.exists
+
+- name: Index the netplan documents
+  ansible.builtin.set_fact:
+    netplan_docs: >-
+      {{ dict(
+           netplan_raw.results | default([]) | map(attribute='item')
+           | zip(
+               netplan_raw.results | default([])
+               | map(attribute='content') | map('b64decode') | map('from_yaml')
+             )
+         ) }}
+
+- name: Look for the ifupdown configuration (Debian, Raspberry Pi OS)
+  ansible.builtin.stat:
+    path: /etc/network/interfaces
+  register: interfaces_stat
+
+- name: Read /etc/network/interfaces
+  ansible.builtin.slurp:
+    path: /etc/network/interfaces
+  register: interfaces_raw
+  when: interfaces_stat.stat.exists
+
+- name: Index the ifupdown stanzas
+  ansible.builtin.set_fact:
+    interfaces_content: "{{ interfaces_raw.content | default('') | b64decode }}"
+
+- name: Look for the dhcpcd configuration (Raspberry Pi OS)
+  ansible.builtin.stat:
+    path: /etc/dhcpcd.conf
+  register: dhcpcd_stat
+
+- name: Check whether dhcpcd is the enabled DHCP client
+  ansible.builtin.command:
+    cmd: systemctl is-enabled dhcpcd
+  register: dhcpcd_enabled
+  changed_when: false
+  failed_when: false
+  when: dhcpcd_stat.stat.exists
+
+- name: Decide whether dhcpcd manages this host's network
+  ansible.builtin.set_fact:
+    dhcpcd_active: >-
+      {{ dhcpcd_stat.stat.exists
+         and (dhcpcd_enabled.rc | default(1)) == 0
+         and (dhcpcd_enabled.stdout | default('')) in ['enabled', 'enabled-runtime'] }}
+
+- name: Read /etc/dhcpcd.conf
+  ansible.builtin.slurp:
+    path: /etc/dhcpcd.conf
+  register: dhcpcd_raw
+  when: dhcpcd_stat.stat.exists
+
+- name: Index the dhcpcd configuration
+  ansible.builtin.set_fact:
+    dhcpcd_content: "{{ dhcpcd_raw.content | default('') | b64decode }}"
+
+- name: Check whether NetworkManager is the active network manager
+  ansible.builtin.command:
+    cmd: systemctl is-active NetworkManager
+  register: nm_service
+  changed_when: false
+  failed_when: false
+
+- name: Read the active NetworkManager connections
+  ansible.builtin.command:
+    cmd: nmcli -t -f NAME,DEVICE connection show --active
+  register: nm_conns
+  changed_when: false
+  failed_when: false
+  when: nm_service.stdout | default('') == 'active'
+
+- name: Look up the IPv4 method of each active NetworkManager connection
+  ansible.builtin.command:
+    cmd: nmcli -g ipv4.method connection show "{{ item.name }}"
+  register: nm_methods_raw
+  changed_when: false
+  failed_when: false
+  loop: "{{ nm_conns.stdout | default('') | rushwilt.pi.nmcli_active }}"
+  when: nm_service.stdout | default('') == 'active'
+
+- name: Index the interfaces NetworkManager hands to DHCP
+  ansible.builtin.set_fact:
+    nm_dhcp: >-
+      {{ (nm_conns.stdout | default('') | rushwilt.pi.nmcli_active) | map(attribute='device') | list
+         | rushwilt.pi.zip_dict(
+             nm_methods_raw.results | default([])
+             | map(attribute='stdout') | map('trim') | list
+           ) }}
+  when: nm_service.stdout | default('') == 'active'
+
+- name: Read the NTP servers the time service received from the network
+  ansible.builtin.command:
+    cmd: busctl --no-pager get-property org.freedesktop.timesync1 /org/freedesktop/timesync1 org.freedesktop.timesync1.Manager LinkNTPServers
+  register: ntp_link_raw
+  changed_when: false
+  failed_when: false
+
+- name: Index the DHCP-provided NTP servers
+  ansible.builtin.set_fact:
+    ntp_servers: "{{ ntp_link_raw.stdout | default('') | rushwilt.pi.timesync_ntp }}"
+
+- name: Resolve the backend that hands each leased interface to DHCP
+  ansible.builtin.set_fact:
+    dhcp_to_static_targets: >-
+      {{ dhcp_to_static_targets | default({})
+         | combine({ item.key: item.key | rushwilt.pi.backend_of(item.value, netplan_docs, interfaces_content, dhcpcd_active, nm_dhcp | default({})) }) }}
+  loop: "{{ dhcp_to_static_leases | dict2items }}"
+  when: item.key is not match(dhcp_to_static_exclude)
+
+- name: Keep only the interfaces a supported backend still hands to DHCP
+  ansible.builtin.set_fact:
+    dhcp_to_static_targets: >-
+      {{ dhcp_to_static_targets | dict2items
+         | rejectattr('value', 'none') | rushwilt.pi.dict_from_items }}
+
+- name: Index the leased interfaces this role will not touch
+  ansible.builtin.set_fact:
+    dhcp_to_static_skipped: >-
+      {{ dhcp_to_static_leases | dict2items
+         | rejectattr('key', 'in', dhcp_to_static_targets | dict2items | map(attribute='key') | list)
+         | rejectattr('key', 'match', dhcp_to_static_exclude)
+         | rushwilt.pi.dict_from_items }}
+
+- name: Report the skipped interfaces
+  ansible.builtin.debug:
+    msg: "{{ item.key }}: has a live lease but is not DHCP-managed by a supported backend; leaving it alone"
+  loop: "{{ dhcp_to_static_skipped | dict2items }}"
+  when: dhcp_to_static_skipped | length > 0
+
+- name: Group the target interfaces by backend
+  ansible.builtin.set_fact:
+    dhcp_to_static_by_backend:
+      netplan: "{{ dhcp_to_static_targets | dict2items | selectattr('value.backend', 'eq', 'netplan') | map(attribute='key') | list }}"
+      ifupdown: "{{ dhcp_to_static_targets | dict2items | selectattr('value.backend', 'eq', 'ifupdown') | map(attribute='key') | list }}"
+      networkmanager: "{{ dhcp_to_static_targets | dict2items | selectattr('value.backend', 'eq', 'networkmanager') | map(attribute='key') | list }}"
+      dhcpcd: "{{ dhcp_to_static_targets | dict2items | selectattr('value.backend', 'eq', 'dhcpcd') | map(attribute='key') | list }}"
+
+- name: Collect the netplan files that manage a target interface
+  ansible.builtin.set_fact:
+    netplan_target_files: >-
+      {{ dhcp_to_static_targets | dict2items
+         | selectattr('value.backend', 'eq', 'netplan')
+         | map(attribute='value.file') | unique | list }}
+
+- name: Report the detected state
+  ansible.builtin.debug:
+    msg: >-
+      Leases seen: {{ dhcp_to_static_leases | length }},
+      converting: {{ dhcp_to_static_targets | length }},
+      skipping: {{ dhcp_to_static_skipped | length }}

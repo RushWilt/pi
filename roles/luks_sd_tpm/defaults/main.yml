@@ -1,0 +1,42 @@
+---
+# The SD card that backs the LUKS data volume.  The role rewrites the
+# partition table on this device, so it must not host the system
+# (checked in tasks/rebuild.yml before anything is wiped).
+rushwilt_luks_sd_device: /dev/mmcblk0
+
+# Partition number of the LUKS volume on that device.
+rushwilt_luks_sd_partition: 1
+
+# The device-mapper name the volume is opened under, and the mountpoint
+# it is exposed at.
+rushwilt_luks_sd_mapper: data
+rushwilt_luks_sd_mountpoint: /data
+
+# Filesystem created inside the LUKS volume.
+rushwilt_luks_sd_fs: ext4
+
+# The LUKS keyslot key is this many bytes of /dev/urandom material.
+# The key is sealed to the TPM with a clevis tpm2 binding and no other
+# keyslot is left, so the volume can only be unlocked on this board.
+rushwilt_luks_sd_key_bytes: 64
+
+# PCR policy of the clevis tpm2 binding (sha256 bank).  The sealed key
+# can only be unsealed when the PCRs still match the values recorded
+# at bind time.
+rushwilt_luks_sd_pcrs: 0,2,4
+# When true, forces the wipe-and-rebuild path even when the card
+# already carries a healthy volume: the card is wiped, a fresh LUKS
+# volume is built with a new random key, and the key is re-sealed to
+# the TPM (the old data is destroyed).
+format_sdcard: false
+
+# Userspace packages the role needs.
+rushwilt_luks_sd_packages:
+  - cryptsetup
+  - clevis
+  - clevis-luks
+  - clevis-tpm2
+  - clevis-systemd
+  - e2fsprogs
+  - parted
+  - tpm2-tools

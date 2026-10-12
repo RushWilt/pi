@@ -1,0 +1,24 @@
+---
+# Debian/Ubuntu desktop: the interface's DHCP settings come from a
+# NetworkManager connection (often an implicit one).  Write a file-backed
+# static connection that out-ranks the implicit one on boot
+# (autoconnect-priority 0 vs -999), then reload and activate it.
+
+- name: Ensure the NetworkManager connection directory exists
+  ansible.builtin.file:
+    path: /etc/NetworkManager/system-connections
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Write the static NetworkManager connections
+  ansible.builtin.copy:
+    dest: "/etc/NetworkManager/system-connections/rushwilt-{{ item }}.nmconnection"
+    content: "{{ item | rushwilt.pi.nm_keyfile(dhcp_to_static_targets[item], resolv.servers, resolv.search) }}"
+    owner: root
+    group: root
+    mode: '0600'
+    backup: true
+  loop: "{{ dhcp_to_static_by_backend.networkmanager }}"
+  notify: Activate the static NetworkManager connections

@@ -1,0 +1,71 @@
+---
+# Work out the state of the SD card LUKS volume: whether the partition
+# carries a LUKS2 volume with a clevis tpm2 binding, whether that
+# binding is currently opened as /dev/mapper/data, whether /data is
+# mounted, and whether the board TPM is live.
+
+- name: Check for the SD card device
+  ansible.builtin.stat:
+    path: "{{ rushwilt_luks_sd_device }}"
+  register: luks_sd_dev
+
+- name: Check for the LUKS partition
+  ansible.builtin.stat:
+    path: "{{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}"
+  register: luks_sd_part
+
+- name: Check whether the partition carries a LUKS volume
+  ansible.builtin.shell:
+    cmd: cryptsetup isLuks {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  register: luks_sd_isluks
+  changed_when: false
+  failed_when: false
+
+- name: List the clevis bindings on the LUKS volume
+  ansible.builtin.shell:
+    cmd: clevis luks list -d {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  register: luks_sd_bindings
+  changed_when: false
+  failed_when: false
+
+- name: Check whether the volume is open as the expected mapper
+  ansible.builtin.shell:
+    cmd: cryptsetup status /dev/mapper/{{ rushwilt_luks_sd_mapper }}
+  register: luks_sd_status
+  changed_when: false
+  failed_when: false
+
+- name: Check whether the mountpoint is in use
+  ansible.builtin.shell:
+    cmd: findmnt -n -o SOURCE {{ rushwilt_luks_sd_mountpoint }}
+  register: luks_sd_mount
+  changed_when: false
+  failed_when: false
+
+- name: Record the partition UUID for stable boot references
+  ansible.builtin.shell:
+    cmd: lsblk -no PARTUUID {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  register: luks_sd_partuuid
+  changed_when: false
+  failed_when: false
+
+- name: Check for a live TPM device
+  ansible.builtin.stat:
+    path: /dev/tpm0
+  register: luks_sd_tpm_dev
+
+- name: Compute the LUKS state facts
+  ansible.builtin.set_fact:
+    rushwilt_luks_sd_open: >-
+      {{ luks_sd_status.rc == 0
+         and luks_sd_status.stdout is regex(rushwilt_luks_sd_device ~ 'p' ~ rushwilt_luks_sd_partition) }}
+    rushwilt_luks_sd_mounted: >-
+      {{ luks_sd_mount.rc == 0
+         and luks_sd_mount.stdout_lines | unique | length == 1
+         and luks_sd_mount.stdout_lines[0] == '/dev/mapper/' ~ rushwilt_luks_sd_mapper }}
+
+- name: Compute the LUKS verdict
+  ansible.builtin.set_fact:
+    rushwilt_luks_sd_healthy: >-
+      {{ luks_sd_isluks.rc == 0
+         and 'tpm2' in luks_sd_bindings.stdout }}

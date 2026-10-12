@@ -1,0 +1,81 @@
+---
+# Work out the TPM state of this host: whether it runs a Raspberry Pi
+# firmware layout with a kernel that ships the SPI TPM overlay and
+# driver, and whether a TPM is already live on /dev/tpm0.
+
+- name: Assert a supported distribution
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] in ['Debian', 'Ubuntu']
+    fail_msg: >-
+      rushwilt.pi.tpm targets the latest Debian and Ubuntu releases
+      (including the Debian-based Raspberry Pi OS).
+      This host reports {{ ansible_facts['distribution'] }}
+      {{ ansible_facts['distribution_version'] }}.
+
+- name: Refuse to run unprivileged
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['user_id'] == 'root'
+    fail_msg: >-
+      This role rewrites the boot configuration;
+      run the play with become: true.
+
+- name: Look for the Raspberry Pi firmware boot configuration
+  ansible.builtin.stat:
+    path: /boot/firmware/config.txt
+  register: fw_config
+
+- name: Look for the legacy boot configuration
+  ansible.builtin.stat:
+    path: /boot/config.txt
+  register: legacy_config
+
+- name: Resolve the boot configuration path
+  ansible.builtin.set_fact:
+    rushwilt_tpm_config: >-
+      {%- if fw_config.stat.exists -%}
+      /boot/firmware/config.txt
+      {%- elif legacy_config.stat.exists -%}
+      /boot/config.txt
+      {%- endif -%}
+
+- name: Check whether the running kernel ships the TPM overlay
+  ansible.builtin.stat:
+    path: "/lib/modules/{{ ansible_facts['kernel'] }}/dtb/overlays/{{ rushwilt_tpm_dtoverlay }}.dtbo"
+  register: tpm_overlay
+
+- name: Check whether the running kernel ships the TIS SPI TPM driver
+  ansible.builtin.find:
+    paths: "/lib/modules/{{ ansible_facts['kernel'] }}/kernel/drivers/char/tpm"
+    patterns: tpm_tis_spi*
+  register: tpm_driver
+
+- name: Check for a live TPM device
+  ansible.builtin.stat:
+    path: /dev/tpm0
+  register: tpm_dev
+
+- name: Compute the support verdict
+  ansible.builtin.set_fact:
+    rushwilt_tpm_supported: >-
+      {{ (fw_config.stat.exists or legacy_config.stat.exists)
+         and tpm_overlay.stat.exists
+         and tpm_driver.matched > 0 }}
+    rushwilt_tpm_present: "{{ tpm_dev.stat.exists }}"
+
+- name: Explain why the host is unsupported
+  ansible.builtin.set_fact:
+    rushwilt_tpm_unsupported_reason: >-
+      {%- if not (fw_config.stat.exists or legacy_config.stat.exists) -%}
+      no Raspberry Pi boot configuration found
+      (neither /boot/firmware/config.txt nor /boot/config.txt);
+      this host does not look like a Raspberry Pi.
+      {%- elif not tpm_overlay.stat.exists -%}
+      the running kernel ({{ ansible_facts['kernel'] }})
+      does not ship the {{ rushwilt_tpm_dtoverlay }}
+      device-tree overlay.
+      {%- else -%}
+      the running kernel ({{ ansible_facts['kernel'] }})
+      does not ship the tpm_tis_spi driver.
+      {%- endif -%}

@@ -1,0 +1,26 @@
+---
+# Confirm the chip answers on /dev/tpm0 and record its firmware version.
+
+- name: Start up the TPM and query its fixed properties
+  ansible.builtin.shell:
+    cmd: tpm2_startup -c 2>/dev/null; tpm2_getcap properties-fixed
+  register: tpm_getcap
+  changed_when: false
+
+- name: Confirm the TPM answers
+  ansible.builtin.assert:
+    that:
+      - tpm_getcap.rc == 0
+      - "'TPM2_PT_FIRMWARE_VERSION_1' in tpm_getcap.stdout"
+    fail_msg: >-
+      /dev/tpm0 exists but the TPM did not answer
+      (tpm2_getcap rc={{ tpm_getcap.rc }}).
+      Output: {{ tpm_getcap.stdout }}
+
+- name: Record the TPM firmware version
+  ansible.builtin.set_fact:
+    rushwilt_tpm_firmware: >-
+      {{ tpm_getcap.stdout
+         | regex_search('TPM2_PT_FIRMWARE_VERSION_1:\n\s*raw:\s*0x[0-9A-Fa-f]+')
+         | default('unknown', true)
+         | regex_replace('TPM2_PT_FIRMWARE_VERSION_1:\n\s*raw:\s*', '') }}

@@ -1,0 +1,29 @@
+---
+# Debian: rewrite the `iface <if> inet dhcp` stanzas of
+# /etc/network/interfaces as static and pin the resolver configuration,
+# because a static interface no longer receives DNS from DHCP.
+
+- name: Refuse to clobber a resolver file that a service owns
+  ansible.builtin.assert:
+    that:
+      - not (resolv_stat.stat.exists and resolv_stat.stat.islnk)
+    fail_msg: /etc/resolv.conf is a symlink; this role only rewrites plain files.
+
+- name: Rewrite the DHCP stanzas as static
+  ansible.builtin.copy:
+    dest: /etc/network/interfaces
+    content: "{{ interfaces_content | rushwilt.pi.ifupdown_static(dhcp_to_static_targets) }}"
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  notify: Restart the network (ifupdown)
+
+- name: Write the static resolver configuration
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    content: "{{ resolv.servers | rushwilt.pi.resolv_content(resolv.search) }}"
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true

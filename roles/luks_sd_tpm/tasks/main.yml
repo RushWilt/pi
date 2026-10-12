@@ -1,0 +1,90 @@
+---
+# rushwilt.pi.luks_sd_tpm
+#
+# Provides the SD card as a LUKS data volume that can only be unlocked
+# through the board TPM, mounted at /data:
+#   * a card that already carries a LUKS volume with a working clevis
+#     tpm2 binding is left alone (the volume is opened through the TPM
+#     if it is closed, and the boot wiring is ensured),
+#   * any other card (no LUKS, no binding, or a binding the TPM can no
+#     longer unseal) is wiped and built fresh: one GPT partition, a
+#     LUKS2 volume keyed by a strong random 64-byte string, that key
+#     sealed to the TPM with a clevis tpm2 binding under a PCR policy,
+#     an fstab mount and a oneshot unit that unseals it at boot.
+#   * format_sdcard: true forces the wipe-and-rebuild path even for a
+#     healthy card (clean slate: new key, new TPM2 seal; old data gone).
+
+- name: Refuse to run unprivileged
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['user_id'] == 'root'
+    fail_msg: >-
+      This role rewrites the SD card;
+      run the play with become: true.
+
+- name: Ensure the LUKS tooling is present
+  ansible.builtin.apt:
+    name: "{{ rushwilt_luks_sd_packages }}"
+    state: present
+
+- name: Detect the LUKS and TPM state
+  ansible.builtin.import_tasks: detect.yml
+
+- name: Refuse to run without the SD card
+  ansible.builtin.fail:
+    msg: >-
+      {{ rushwilt_luks_sd_device }} does not exist on this host;
+      the LUKS data volume has no backing card.
+  when: not luks_sd_dev.stat.exists
+
+- name: Refuse to run without a live TPM
+  ansible.builtin.fail:
+    msg: >-
+      /dev/tpm0 does not exist, so the LUKS key cannot be sealed to a
+      TPM.
+      {%- if rushwilt_tpm_reboot_pending | default(false) %}
+      The TPM configuration was just applied;
+      reboot the board and re-run the play.
+      {%- endif %}
+  when: not luks_sd_tpm_dev.stat.exists
+
+- name: Open the volume through the TPM if it is closed
+  ansible.builtin.include_tasks: open-or-verify.yml
+  when: rushwilt_luks_sd_healthy
+
+- name: Build the LUKS volume on the SD card
+  ansible.builtin.include_tasks: rebuild.yml
+  when: >-
+    not rushwilt_luks_sd_healthy
+    or rushwilt_luks_sd_rebuild | default(false)
+    or format_sdcard | default(false) | bool
+
+- name: Wire the boot unlock and the /data mount
+  ansible.builtin.include_tasks: wire.yml
+
+- name: Report a freshly built LUKS volume
+  ansible.builtin.debug:
+    msg: >-
+      SD card {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+      now holds a LUKS2 volume keyed by
+      {{ rushwilt_luks_sd_key_bytes }} random bytes;
+      the key is sealed to this board's TPM
+      (clevis tpm2, PCRs {{ rushwilt_luks_sd_pcrs }})
+      and the volume can only be unlocked here.
+      /data is mounted and unlocks automatically at boot.
+  when: >-
+    not rushwilt_luks_sd_healthy
+    or rushwilt_luks_sd_rebuild | default(false)
+    or format_sdcard | default(false) | bool
+
+- name: Report a healthy LUKS volume
+  ansible.builtin.debug:
+    msg: >-
+      The LUKS volume on {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+      is already sealed to this board's TPM and mounted at
+      {{ rushwilt_luks_sd_mountpoint }};
+      boot unlock is wired via rushwilt-luks-sd-tpm.service.
+  when:
+    - rushwilt_luks_sd_healthy
+    - not rushwilt_luks_sd_rebuild | default(false)
+    - not (format_sdcard | default(false) | bool)

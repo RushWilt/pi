@@ -1,0 +1,56 @@
+---
+# Make the volume come back at every boot:
+#   * an fstab entry that mounts the plain device at /data,
+#   * a oneshot unit that unseals the LUKS key through the TPM and
+#     opens it as /dev/mapper/data, ordered before the mount,
+#   * the mount itself, applied now as well.
+
+- name: Record the partition UUID
+  ansible.builtin.shell:
+    cmd: lsblk -no PARTUUID {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  register: luks_sd_partuuid
+  changed_when: false
+
+- name: Record the filesystem UUID
+  ansible.builtin.shell:
+    cmd: blkid -s UUID -o value /dev/mapper/{{ rushwilt_luks_sd_mapper }}
+  register: luks_sd_fs_uuid
+  changed_when: false
+
+- name: Mount the volume at /data via fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^\S+\s+/data(\s|$)'
+    line: "UUID={{ luks_sd_fs_uuid.stdout }}  {{ rushwilt_luks_sd_mountpoint }}  {{ rushwilt_luks_sd_fs }}  noatime,nofail  0  2"
+    state: present
+  register: fstab_line
+  notify: Reload systemd configuration
+
+- name: Ensure the mountpoint directory
+  ansible.builtin.file:
+    path: "{{ rushwilt_luks_sd_mountpoint }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install the boot unlock unit
+  ansible.builtin.template:
+    src: luks-sd.service.j2
+    dest: /etc/systemd/system/rushwilt-luks-sd-tpm.service
+    owner: root
+    group: root
+    mode: '0644'
+  register: unlock_unit
+  notify: Reload systemd configuration
+
+- name: Enable the boot unlock unit
+  ansible.builtin.systemd:
+    name: rushwilt-luks-sd-tpm.service
+    enabled: true
+
+- name: Mount /data now
+  ansible.builtin.shell:
+    cmd: mountpoint -q {{ rushwilt_luks_sd_mountpoint }} && echo already-mounted || mount {{ rushwilt_luks_sd_mountpoint }}
+  register: data_mount_now
+  changed_when: "'already-mounted' not in data_mount_now.stdout"

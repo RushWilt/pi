@@ -1,0 +1,22 @@
+---
+# The partition carries a LUKS volume with a clevis tpm2 binding, but
+# the volume is not currently open.  Try to unseal it through the TPM;
+# if the board can no longer unseal it (new TPM, drifted PCR policy,
+# corrupted binding) the volume is unusable by design and main.yml
+# sends it down the rebuild path.
+
+- name: Unlock the LUKS volume through the TPM
+  ansible.builtin.shell:
+    cmd: clevis luks unlock -n {{ rushwilt_luks_sd_mapper }} -d {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  register: luks_sd_unlock
+  when: not rushwilt_luks_sd_open
+  failed_when: false
+  changed_when: luks_sd_unlock is not skipped and luks_sd_unlock.rc == 0
+
+- name: Flag a volume the TPM can no longer unseal for rebuild
+  ansible.builtin.set_fact:
+    rushwilt_luks_sd_rebuild: true
+  when:
+    - luks_sd_unlock is defined
+    - luks_sd_unlock is not skipped
+    - luks_sd_unlock.rc != 0

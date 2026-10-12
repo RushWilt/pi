@@ -1,0 +1,47 @@
+---
+# Confirm the reconfiguration actually took effect, not just that the files
+# were written.
+
+- name: Collect the live addresses after the reconfiguration
+  ansible.builtin.command:
+    cmd: ip -j -4 addr show
+  register: verify_addr
+  changed_when: false
+
+- name: Collect the live routes after the reconfiguration
+  ansible.builtin.command:
+    cmd: ip -j route show table main
+  register: verify_route
+  changed_when: false
+
+- name: Index the post-change leases
+  ansible.builtin.set_fact:
+    verify_leases: >-
+      {{ verify_addr.stdout | from_json | rushwilt.pi.lease_index(verify_route.stdout | from_json) }}
+
+- name: Confirm each converted interface keeps its address, prefix and gateway
+  ansible.builtin.assert:
+    that:
+      - item.key in verify_leases
+      - verify_leases[item.key].address == item.value.address
+      - verify_leases[item.key].prefix == item.value.prefix
+      - item.value.gateway is none
+        or verify_leases[item.key].gateway == item.value.gateway
+      - not verify_leases[item.key].dynamic
+    fail_msg: "Static configuration did not take effect on {{ item.key }}"
+    quiet: true
+  loop: "{{ dhcp_to_static_targets | dict2items }}"
+
+- name: Confirm the pinned NTP servers are in the timesyncd drop-in
+  ansible.builtin.slurp:
+    path: /etc/systemd/timesyncd.conf.d/rushwilt-dhcp-to-static.conf
+  register: ntp_dropin_raw
+  when: ntp_servers | length > 0
+
+- name: Assert the timesyncd drop-in pins the expected NTP servers
+  ansible.builtin.assert:
+    that:
+      - "\"NTP=\" ~ (ntp_servers | join(' ')) in (ntp_dropin_raw.content | default('') | b64decode)"
+    fail_msg: "The timesyncd drop-in does not pin the expected NTP servers"
+    quiet: true
+  when: ntp_servers | length > 0

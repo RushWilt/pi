@@ -1,0 +1,28 @@
+---
+dependencies: []
+galaxy_info:
+  author: rushwilt
+  description: >-
+    Brings up a Raspberry Pi SPI TPM 2.0 module (Infineon SLB 967x
+    family) by enabling the SPI controller and the kernel's
+    tpm-slb9670 device-tree overlay in the boot configuration,
+    installing tpm2-tools and verifying the chip answers on /dev/tpm0.
+    Device-tree changes apply at the next boot, so a first run reports
+    that a reboot is pending; boards without a TPM come back as a
+    clean no-op.
+  license: Apache-2.0
+  min_ansible_version: '2.20'
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+    - name: Ubuntu
+      versions:
+        - '24.04'
+        - '26.04'
+  tags:
+    - tpm
+    - security
+    - firmware
+    - raspberry-pi

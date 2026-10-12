@@ -1,0 +1,61 @@
+---
+# rushwilt.pi.dhcp_to_static
+#
+# Finds the interfaces whose settings were issued by a DHCP server and
+# rewrites them as static, keeping the currently assigned address, prefix,
+# default gateway, DNS and NTP servers.  Supported backends:
+#   * netplan          (Ubuntu, server and desktop)
+#   * ifupdown         (Debian)
+#   * networkmanager   (Debian/Ubuntu desktop)
+#   * dhcpcd           (Raspberry Pi OS)
+#
+# Hosts that are not DHCP-managed come back as a clean no-op.
+
+- name: Detect the platform, backends and live DHCP leases
+  ansible.builtin.import_tasks: detect.yml
+
+- name: No DHCP-managed interfaces found
+  ansible.builtin.debug:
+    msg: >-
+      No interface is being configured by a DHCP server
+      ({{ dhcp_to_static_leases | length }} live lease(s) inspected,
+      none claimed by a supported backend). Nothing to do.
+  when: dhcp_to_static_targets | length == 0
+
+- name: Convert the netplan-managed interfaces (Ubuntu)
+  ansible.builtin.include_tasks: netplan.yml
+  when: dhcp_to_static_by_backend.netplan | length > 0
+
+- name: Convert the ifupdown-managed interfaces (Debian)
+  ansible.builtin.include_tasks: ifupdown.yml
+  when: dhcp_to_static_by_backend.ifupdown | length > 0
+
+- name: Convert the dhcpcd-managed interfaces (Raspberry Pi OS)
+  ansible.builtin.include_tasks: dhcpcd.yml
+  when: dhcp_to_static_by_backend.dhcpcd | length > 0
+
+- name: Convert the NetworkManager-managed interfaces (Debian/Ubuntu desktop)
+  ansible.builtin.include_tasks: networkmanager.yml
+  when: dhcp_to_static_by_backend.networkmanager | length > 0
+
+- name: Pin the DHCP-provided NTP servers into systemd-timesyncd
+  ansible.builtin.include_tasks: ntp.yml
+  when:
+    - dhcp_to_static_targets | length > 0
+    - ntp_servers | length > 0
+
+- name: Apply any pending reconfiguration
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify the static configuration is live
+  ansible.builtin.include_tasks: verify.yml
+  when: dhcp_to_static_targets | length > 0
+
+- name: Report each converted interface
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.key }} -> static {{ item.value.address }}/{{ item.value.prefix }}
+      {%- if item.value.gateway %}, gateway {{ item.value.gateway }}{%- endif %}
+      [{{ item.value.backend }}]
+  loop: "{{ dhcp_to_static_targets | dict2items }}"
+  when: dhcp_to_static_targets | length > 0

@@ -1,0 +1,30 @@
+---
+# Raspberry Pi OS: dhcpcd (not ifupdown) hands the interfaces their DHCP
+# settings, so append a managed static stanza to /etc/dhcpcd.conf.
+
+- name: Refuse to duplicate a hand-written interface stanza
+  ansible.builtin.assert:
+    that:
+      - not (dhcpcd_content | regex_search('(?:^|\\n)\\s*interface\\s+' ~ item ~ '\\s*$'))
+    fail_msg: >-
+      /etc/dhcpcd.conf already has a manual 'interface {{ item }}' stanza.
+      Merge the static settings there by hand and re-run this play.
+  loop: "{{ dhcp_to_static_by_backend.dhcpcd }}"
+
+- name: Write the static stanza
+  ansible.builtin.blockinfile:
+    path: /etc/dhcpcd.conf
+    marker: "# {mark} MANAGED by rushwilt.pi.dhcp_to_static ({{ item }})"
+    insertafter: EOF
+    block: |
+      interface {{ item }}
+          static ip_address={{ dhcp_to_static_targets[item].address }}/{{ dhcp_to_static_targets[item].prefix }}
+      {%- if dhcp_to_static_targets[item].gateway %}
+          static routers={{ dhcp_to_static_targets[item].gateway }}
+      {%- endif %}
+      {%- if resolv.search %}
+          static domain_search={{ resolv.search | join(',') }}
+      {%- endif %}
+          static domain_name_servers={{ resolv.servers | join(',') }}
+  loop: "{{ dhcp_to_static_by_backend.dhcpcd }}"
+  notify: Restart dhcpcd

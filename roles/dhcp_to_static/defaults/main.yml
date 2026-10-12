@@ -1,0 +1,9 @@
+---
+# Interface names that must never be converted: loopback plus the usual
+# virtual bridges, tunnels and containers (regex tested against the name).
+dhcp_to_static_exclude: '^(lo|docker|veth|virbr|tap|br-|vcan|dummy|kube|cni|flannel)'
+
+# Minimum supported releases.  tasks/detect.yml fails early on anything
+# older; the role targets the current Debian/Ubuntu/Raspberry Pi OS releases.
+dhcp_to_static_min_debian: [12]
+dhcp_to_static_min_ubuntu: [24, 4]

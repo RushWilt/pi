@@ -1,0 +1,32 @@
+---
+# Write the firmware settings that bring the SPI TPM online and install
+# the userspace tools.  The settings take effect on the next boot, when
+# the firmware applies them to the device tree.
+
+- name: Ensure the SPI controller is enabled
+  ansible.builtin.lineinfile:
+    path: "{{ rushwilt_tpm_config }}"
+    line: "dtparam={{ rushwilt_tpm_dtparam }}"
+    regex: '^dtparam={{ rushwilt_tpm_dtparam }}$'
+    insertafter: '^\[all\]$'
+  register: dtparam_line
+
+- name: Ensure the TPM overlay is applied at boot
+  ansible.builtin.lineinfile:
+    path: "{{ rushwilt_tpm_config }}"
+    line: "dtoverlay={{ rushwilt_tpm_dtoverlay }}"
+    regex: '^dtoverlay={{ rushwilt_tpm_dtoverlay }}$'
+    insertafter: '^\[all\]$'
+  register: dtoverlay_line
+
+- name: Install the tpm2 tools
+  ansible.builtin.apt:
+    name: "{{ rushwilt_tpm_packages }}"
+    state: present
+  register: tpm_tools
+
+- name: Note whether a reboot is pending
+  ansible.builtin.set_fact:
+    rushwilt_tpm_reboot_pending: >-
+      {{ (dtparam_line.changed or dtoverlay_line.changed)
+         and not rushwilt_tpm_present }}

@@ -11,7 +11,7 @@
 #     LUKS2 volume keyed by a strong random 64-byte string, that key
 #     sealed to the TPM with a clevis tpm2 binding under a PCR policy,
 #     an fstab mount and a oneshot unit that unseals it at boot.
-#   * format_sdcard: true forces the wipe-and-rebuild path even for a
+#   * rushwilt_luks_sd_format: true forces the wipe-and-rebuild path even for a
 #     healthy card (clean slate: new key, new TPM2 seal; old data gone).
 
 - name: Refuse to run unprivileged
@@ -57,7 +57,7 @@
   when: >-
     not rushwilt_luks_sd_healthy
     or rushwilt_luks_sd_rebuild | default(false)
-    or format_sdcard | default(false) | bool
+    or rushwilt_luks_sd_format | default(false) | bool
 
 - name: Wire the boot unlock and the /data mount
   ansible.builtin.include_tasks: wire.yml
@@ -75,7 +75,7 @@
   when: >-
     not rushwilt_luks_sd_healthy
     or rushwilt_luks_sd_rebuild | default(false)
-    or format_sdcard | default(false) | bool
+    or rushwilt_luks_sd_format | default(false) | bool
 
 - name: Report a healthy LUKS volume
   ansible.builtin.debug:
@@ -87,4 +87,4 @@
   when:
     - rushwilt_luks_sd_healthy
     - not rushwilt_luks_sd_rebuild | default(false)
-    - not (format_sdcard | default(false) | bool)
+    - not (rushwilt_luks_sd_format | default(false) | bool)

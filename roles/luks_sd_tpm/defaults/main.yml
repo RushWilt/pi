@@ -28,7 +28,7 @@ rushwilt_luks_sd_pcrs: 0,2,4
 # already carries a healthy volume: the card is wiped, a fresh LUKS
 # volume is built with a new random key, and the key is re-sealed to
 # the TPM (the old data is destroyed).
-format_sdcard: false
+rushwilt_luks_sd_format: false
 
 # Userspace packages the role needs.
 rushwilt_luks_sd_packages:

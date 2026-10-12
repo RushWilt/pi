@@ -24,6 +24,9 @@ All notable changes to the `rushwilt.pi` collection.
   the DHCP stage applies, the TPM stage reboots the board in place, and the
   LUKS stage seals the SD card and mounts `/data` in the same run.
 - Root and role READMEs updated to match.
+- **luks_sd_tpm** — the `format_sdcard` variable is now
+  `rushwilt_luks_sd_format`, matching the `rushwilt_luks_sd_*` prefix of
+  the role's other variables.
 
 ## 1.0.0 — 2026-10-12
 

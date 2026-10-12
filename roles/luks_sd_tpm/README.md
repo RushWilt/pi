@@ -22,7 +22,7 @@ this board**, mounted at `/data` and unlocked automatically at boot.
 | LUKS volume with a tpm2 binding, closed             | unsealed through the TPM, boot wiring ensured |
 | LUKS volume the TPM can no longer unseal            | wiped and built fresh |
 | No LUKS / no binding / other binding type           | wiped and built fresh |
-| any of the above, with `format_sdcard: true`        | wiped and built fresh (new key, new seal) |
+| any of the above, with `rushwilt_luks_sd_format: true` | wiped and built fresh (new key, new seal) |
 
 A rebuild: unmounts and closes the volume, wipes all signatures, writes one
 GPT partition, creates the LUKS2 volume (aes-xts-plain64, 512-bit key),
@@ -54,7 +54,7 @@ volume, and creates the filesystem inside it.
 | `rushwilt_luks_sd_key_bytes`  | `64`             | length in bytes of the random LUKS key                         |
 | `rushwilt_luks_sd_pcrs`       | `0,2,4`          | PCR policy (sha256 bank) of the tpm2 binding                   |
 | `rushwilt_luks_sd_packages`   | see below        | userspace packages the role installs                           |
-| `format_sdcard`               | `false`          | force the wipe-and-rebuild path even on a healthy card         |
+| `rushwilt_luks_sd_format`     | `false`          | force the wipe-and-rebuild path even on a healthy card         |
 
 `rushwilt_luks_sd_packages`: `cryptsetup`, `clevis`, `clevis-luks`,
 `clevis-tpm2`, `clevis-systemd`, `e2fsprogs`, `parted`, `tpm2-tools`.
@@ -71,7 +71,7 @@ volume, and creates the filesystem inside it.
 Clean slate (destroys `/data`, new key, new seal):
 
 ```
-ansible-playbook pi5.yml -e format_sdcard=true --limit pi5
+ansible-playbook pi5.yml -e rushwilt_luks_sd_format=true --limit pi5
 ```
 
 ## Facts

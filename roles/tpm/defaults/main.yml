@@ -14,4 +14,13 @@ rushwilt_tpm_packages:
 # Fail the play when this board is expected to carry a TPM module but
 # no TPM answers on /dev/tpm0 once the configuration is in place.
 # Boards that simply do not have a module fitted are reported instead.
+
+# Reboot the board in place when the firmware configuration was just
+# applied: schedule the reboot, wait for the board to come back on its
+# address, then continue the play with the verification.  The board must
+# keep that address across the reboot (the dhcp_to_static role, earlier in
+# the play, takes care of it); when a leased interface still holds a
+# dynamic lease with a gateway, the role falls back to reporting the
+# pending reboot instead.
+rushwilt_tpm_auto_reboot: true
 rushwilt_tpm_fail_if_absent: false

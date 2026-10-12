@@ -48,9 +48,10 @@ collections:
     - rushwilt.pi.luks_sd_tpm
 ```
 
-Typical first contact with a freshly imaged Pi: run the play (the DHCP and
-TPM stages apply; the LUKS stage stops with *"reboot the board and re-run
-the play"*), reboot, re-run — then the play is idle (`changed=0`).
+Typical first contact with a freshly imaged Pi: one run of the play.  The
+DHCP stage applies, the TPM stage reboots the board in place and waits for
+it to come back, and the LUKS stage then seals the SD card and mounts
+`/data` — all in the same run.  Re-running the play is idle (`changed=0`).
 
 ## Requirements
 

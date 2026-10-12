@@ -33,8 +33,9 @@ volume, and creates the filesystem inside it.
 
 - `ansible-core >= 2.20`
 - the **`rushwilt.pi.tpm` role** (declared as a dependency) — a live TPM on
-  `/dev/tpm0`; first contact on a fresh OS stops after the TPM configuration
-  with *"reboot the board and re-run the play"*
+  `/dev/tpm0`; on a fresh OS the tpm role reboots the board in place
+  (`rushwilt_tpm_auto_reboot`, default `true`) and this role continues in
+  the same run
 - an SD card on `/dev/mmcblk0` that does not host the system (checked
   before anything is wiped)
 - `become: true`

@@ -10,6 +10,14 @@
 #
 # Boards without a TPM module come back as a clean no-op.
 
+- name: Refuse check mode
+  ansible.builtin.assert:
+    that:
+      - not ansible_check_mode
+    fail_msg: >-
+      This role rewrites the boot configuration and may reboot the host;
+      it cannot be previewed with --check.
+
 - name: Detect the TPM state
   ansible.builtin.import_tasks: detect.yml
 
@@ -23,6 +31,67 @@
 - name: Configure the SPI TPM (Raspberry Pi)
   ansible.builtin.include_tasks: configure.yml
   when: rushwilt_tpm_supported
+- name: Decide whether the board can be rebooted in place
+  ansible.builtin.set_fact:
+    rushwilt_tpm_reboot_now: >-
+      {{ rushwilt_tpm_reboot_pending
+         and (rushwilt_tpm_auto_reboot | bool)
+         and not (dhcp_to_static_skipped | default({}) | dict2items
+                  | map(attribute='value')
+                  | selectattr('dynamic', 'equalto', true)
+                  | selectattr('gateway', 'defined')
+                  | list | length > 0) }}
+  when: rushwilt_tpm_supported
+
+- name: Announce the in-place reboot
+  ansible.builtin.debug:
+    msg: >-
+      The TPM configuration needs a reboot to take effect;
+      rebooting the board now and waiting for it to come back.
+  when: rushwilt_tpm_reboot_now | default(false) | bool
+
+- name: Schedule the reboot
+  ansible.builtin.command:
+    cmd: shutdown -r +1 "rebooted by rushwilt.pi.tpm to apply the TPM configuration"
+  changed_when: true
+  when: rushwilt_tpm_reboot_now | default(false) | bool
+
+- name: Wait for the board to go down
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: 22
+    state: absent
+    timeout: 120
+  # A module by default runs on the target, which is the host that is about
+  # to reboot; delegate the polling to the controller instead.
+  delegate_to: localhost
+  when: rushwilt_tpm_reboot_now | default(false) | bool
+
+- name: Wait for the board to come back
+  ansible.builtin.wait_for:
+    host: "{{ ansible_host | default(inventory_hostname) }}"
+    port: 22
+    state: present
+    timeout: 600
+  delegate_to: localhost
+  when: rushwilt_tpm_reboot_now | default(false) | bool
+
+- name: Wait until the board takes SSH connections again
+  ansible.builtin.ping:
+  register: tpm_board_up
+  until: tpm_board_up is succeeded
+  retries: 30
+  delay: 10
+  when: rushwilt_tpm_reboot_now | default(false) | bool
+
+- name: Detect the TPM state after the reboot
+  ansible.builtin.import_tasks: detect.yml
+  when: rushwilt_tpm_reboot_now | default(false) | bool
+
+- name: Clear the pending-reboot flag; the firmware has applied the configuration
+  ansible.builtin.set_fact:
+    rushwilt_tpm_reboot_pending: false
+  when: rushwilt_tpm_reboot_now | default(false) | bool
 
 - name: Verify the TPM is live
   ansible.builtin.include_tasks: verify.yml

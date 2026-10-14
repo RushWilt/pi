@@ -2,6 +2,16 @@
 
 All notable changes to the `rushwilt.pi` collection.
 
+## 1.2.0 — 2026-10-14
+
+### Added
+
+- **luks_sd_tpm** — the volume is now mounted at a configurable
+  mountpoint instead of the hardcoded `/data`: new default variable
+  `rushwilt_luks_sd_mountpoint` (default `/data`). The fstab entry,
+  the systemd boot-unlock ordering (`Before=<mountpoint>.mount`) and
+  the "mount now" task all follow the configured mountpoint.
+
 ## 1.1.0 — 2026-10-12
 
 ### Added

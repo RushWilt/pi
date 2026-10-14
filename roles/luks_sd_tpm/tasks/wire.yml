@@ -1,6 +1,6 @@
 ---
 # Make the volume come back at every boot:
-#   * an fstab entry that mounts the plain device at /data,
+#   * an fstab entry that mounts the plain device at the mountpoint,
 #   * a oneshot unit that unseals the LUKS key through the TPM and
 #     opens it as /dev/mapper/data, ordered before the mount,
 #   * the mount itself, applied now as well.
@@ -17,10 +17,10 @@
   register: luks_sd_fs_uuid
   changed_when: false
 
-- name: Mount the volume at /data via fstab
+- name: Mount the volume via fstab
   ansible.builtin.lineinfile:
     path: /etc/fstab
-    regexp: '^\S+\s+/data(\s|$)'
+    regexp: '^\S+\s+{{ rushwilt_luks_sd_mountpoint }}(\s|$)'
     line: "UUID={{ luks_sd_fs_uuid.stdout }}  {{ rushwilt_luks_sd_mountpoint }}  {{ rushwilt_luks_sd_fs }}  noatime,nofail  0  2"
     state: present
   register: fstab_line
@@ -49,7 +49,7 @@
     name: rushwilt-luks-sd-tpm.service
     enabled: true
 
-- name: Mount /data now
+- name: Mount the volume now
   ansible.builtin.shell:
     cmd: mountpoint -q {{ rushwilt_luks_sd_mountpoint }} && echo already-mounted || mount {{ rushwilt_luks_sd_mountpoint }}
   register: data_mount_now

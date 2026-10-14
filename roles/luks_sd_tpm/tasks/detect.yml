@@ -1,8 +1,8 @@
 ---
 # Work out the state of the SD card LUKS volume: whether the partition
 # carries a LUKS2 volume with a clevis tpm2 binding, whether that
-# binding is currently opened as /dev/mapper/data, whether /data is
-# mounted, and whether the board TPM is live.
+# binding is currently opened as /dev/mapper/data, whether the
+# mountpoint is in use, and whether the board TPM is live.
 
 - name: Check for the SD card device
   ansible.builtin.stat:

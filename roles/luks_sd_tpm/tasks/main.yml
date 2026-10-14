@@ -2,7 +2,7 @@
 # rushwilt.pi.luks_sd_tpm
 #
 # Provides the SD card as a LUKS data volume that can only be unlocked
-# through the board TPM, mounted at /data:
+# through the board TPM, mounted at the configured mountpoint:
 #   * a card that already carries a LUKS volume with a working clevis
 #     tpm2 binding is left alone (the volume is opened through the TPM
 #     if it is closed, and the boot wiring is ensured),
@@ -59,7 +59,7 @@
     or rushwilt_luks_sd_rebuild | default(false)
     or rushwilt_luks_sd_format | default(false) | bool
 
-- name: Wire the boot unlock and the /data mount
+- name: Wire the boot unlock and the mount
   ansible.builtin.include_tasks: wire.yml
 
 - name: Report a freshly built LUKS volume
@@ -71,7 +71,7 @@
       the key is sealed to this board's TPM
       (clevis tpm2, PCRs {{ rushwilt_luks_sd_pcrs }})
       and the volume can only be unlocked here.
-      /data is mounted and unlocks automatically at boot.
+      {{ rushwilt_luks_sd_mountpoint }} is mounted and unlocks automatically at boot.
   when: >-
     not rushwilt_luks_sd_healthy
     or rushwilt_luks_sd_rebuild | default(false)

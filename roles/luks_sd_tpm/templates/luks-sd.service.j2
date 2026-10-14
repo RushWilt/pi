@@ -1,6 +1,6 @@
 [Unit]
 Description=Unlock the SD card LUKS volume with the board TPM (clevis tpm2)
-Before=data.mount
+Before={{ rushwilt_luks_sd_mountpoint | regex_replace('^/', '') | replace('/', '-') | replace(':', '_') }}.mount
 
 [Service]
 Type=oneshot

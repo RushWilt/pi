@@ -5,7 +5,8 @@ galaxy_info:
   author: rushwilt
   description: >-
     Provides the SD card as a LUKS volume that can only be unlocked
-    through the board TPM, mounted at /data.  The LUKS keyslot key is a
+    through the board TPM, mounted at the configured mountpoint
+    (default /opt).  The LUKS keyslot key is a
     strong random 64-byte string; its only copy is sealed to the TPM
     with a clevis tpm2 binding under a PCR policy, so a card that
     cannot be unsealed on this board (new hardware, lost binding) is

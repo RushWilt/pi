@@ -2,7 +2,7 @@
 # Make the volume come back at every boot:
 #   * an fstab entry that mounts the plain device at the mountpoint,
 #   * a oneshot unit that unseals the LUKS key through the TPM and
-#     opens it as /dev/mapper/data, ordered before the mount,
+#     opens it under the mapper name, ordered before the mount,
 #   * the mount itself, applied now as well.
 
 - name: Record the partition UUID

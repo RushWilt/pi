@@ -7,7 +7,7 @@ Ansible collection of roles for a fleet of FreshPi-managed Raspberry Pis
 |-------------------------------------|-------------------------------------------------------------------------|
 | `rushwilt.pi.dhcp_to_static`        | rewrite DHCP-issued network settings as static, keeping IP/gateway/DNS/NTP |
 | `rushwilt.pi.tpm`                   | bring up the SPI TPM 2.0 module (device-tree overlay + `tpm2-tools`)    |
-| `rushwilt.pi.luks_sd_tpm`           | SD card as a LUKS data volume only the board's TPM can unseal, at `/data` |
+| `rushwilt.pi.luks_sd_tpm`           | SD card as a LUKS data volume only the board's TPM can unseal, at the configured mountpoint (default `/opt`) |
 
 Each role is documented in its own directory — see
 [`roles/dhcp_to_static/README.md`](roles/dhcp_to_static/README.md),
@@ -51,7 +51,7 @@ collections:
 Typical first contact with a freshly imaged Pi: one run of the play.  The
 DHCP stage applies, the TPM stage reboots the board in place and waits for
 it to come back, and the LUKS stage then seals the SD card and mounts
-`/data` — all in the same run.  Re-running the play is idle (`changed=0`).
+the mountpoint (default `/opt`) — all in the same run.
 
 ## Requirements
 

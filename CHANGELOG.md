@@ -2,6 +2,18 @@
 
 All notable changes to the `rushwilt.pi` collection.
 
+## 1.3.0 — 2026-10-15
+
+### Changed
+
+- **luks_sd_tpm** — the device-mapper name now follows from the
+  mountpoint (path separators and colons become `_`; the default `/opt`
+  opens as `/dev/mapper/opt`) and the default mountpoint moves from
+  `/data` to `/opt`. `rushwilt_luks_sd_mapper` still overrides the
+  derivation. A volume already open under the legacy `data` name
+  migrates in place on the next run (closed and re-opened under the
+  derived name) — no wipe, no data loss.
+
 ## 1.2.0 — 2026-10-14
 
 ### Added

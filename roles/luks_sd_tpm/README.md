@@ -1,7 +1,8 @@
 # rushwilt.pi.luks_sd_tpm
 
 Provides the SD card as a **LUKS2 data volume that can only be unsealed on
-this board**, mounted at `/data` and unlocked automatically at boot.
+this board**, mounted at the configured mountpoint (default `/opt`)
+and unlocked automatically at boot.
 
 - The LUKS keyslot key is 64 random bytes from `/dev/urandom`; the key
   material only ever exists in `/run` (tmpfs) and is shredded as soon as the
@@ -47,9 +48,8 @@ volume, and creates the filesystem inside it.
 | Variable                      | Default          | Purpose                                                        |
 |-------------------------------|------------------|----------------------------------------------------------------|
 | `rushwilt_luks_sd_device`     | `/dev/mmcblk0`   | the SD card; its partition table is rewritten                  |
-| `rushwilt_luks_sd_partition`  | `1`              | partition number of the LUKS volume                            |
-| `rushwilt_luks_sd_mapper`     | `data`           | device-mapper name the volume is opened under                  |
-| `rushwilt_luks_sd_mountpoint` | `/data`          | mountpoint of the volume                                       |
+| `rushwilt_luks_sd_mapper`     | derived from the mountpoint (path separators become `_`); overrides the derivation | device-mapper name the volume is opened under |
+| `rushwilt_luks_sd_mountpoint` | `/opt`             | mountpoint of the volume                                       |
 | `rushwilt_luks_sd_fs`         | `ext4`           | filesystem created inside the volume                           |
 | `rushwilt_luks_sd_key_bytes`  | `64`             | length in bytes of the random LUKS key                         |
 | `rushwilt_luks_sd_pcrs`       | `0,2,4`          | PCR policy (sha256 bank) of the tpm2 binding                   |
@@ -68,7 +68,7 @@ volume, and creates the filesystem inside it.
     - rushwilt.pi.luks_sd_tpm
 ```
 
-Clean slate (destroys `/data`, new key, new seal):
+Clean slate (destroys the mountpoint's contents, new key, new seal):
 
 ```
 ansible-playbook pi5.yml -e rushwilt_luks_sd_format=true --limit pi5
@@ -85,14 +85,15 @@ After the role runs, the play scope carries `rushwilt_luks_sd_healthy`
 
 - A re-image of the boot disk (NVMe) does not touch the SD card; the seal is
   bound to the board and its boot chain, so with the same image in place
-  `/data` survives a re-blat and the role re-wires it on the next run.
+  the mountpoint survives a re-blat and the role re-wires it on the
+  next run.
 - Verify the setup with:
 
   ```
   sudo blkid /dev/mmcblk0p1                 # TYPE="crypto_LUKS"
   sudo cryptsetup luksDump /dev/mmcblk0p1   # LUKS2, aes-xts-plain64
   sudo clevis luks list -d /dev/mmcblk0p1   # 0: tpm2 {... "pcr_ids":"0,2,4"}
-  sudo cryptsetup status data               # open, backed by the card
+  sudo cryptsetup status opt               # open, backed by the card
   ```
 
 ## License

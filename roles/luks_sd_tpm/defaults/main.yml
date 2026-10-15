@@ -7,10 +7,15 @@ rushwilt_luks_sd_device: /dev/mmcblk0
 # Partition number of the LUKS volume on that device.
 rushwilt_luks_sd_partition: 1
 
-# The device-mapper name the volume is opened under, and the mountpoint
-# it is exposed at.
-rushwilt_luks_sd_mapper: data
-rushwilt_luks_sd_mountpoint: /data
+# The mountpoint the volume is exposed at, and the device-mapper name
+# it is opened under: the mapper name follows from the mountpoint
+# (path separators become underscores), so the default /opt opens as
+# /dev/mapper/opt.  Set rushwilt_luks_sd_mapper to override the
+# derivation.
+rushwilt_luks_sd_mountpoint: /opt
+rushwilt_luks_sd_mapper: >-
+  {{ rushwilt_luks_sd_mountpoint | regex_replace('^/', '')
+     | replace('/', '_') | replace(':', '_') }}
 
 # Filesystem created inside the LUKS volume.
 rushwilt_luks_sd_fs: ext4

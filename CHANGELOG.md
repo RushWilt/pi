@@ -2,6 +2,17 @@
 
 All notable changes to the `rushwilt.pi` collection.
 
+## 1.3.1 — 2026-10-20
+
+### Fixed
+
+- **luks_sd_tpm** — `rushwilt_luks_sd_format: true` on a healthy card
+  that was closed when the role started (e.g. right after an OS
+  reinstall) failed at `wipefs` with "Device or resource busy": the
+  role opened the volume through the TPM first, then skipped closing it
+  because the open/mounted state was read before. The rebuild path now
+  unmounts and closes by the live state.
+
 ## 1.3.0 — 2026-10-15
 
 ### Changed

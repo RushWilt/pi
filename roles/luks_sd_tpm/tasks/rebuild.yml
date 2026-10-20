@@ -9,17 +9,31 @@
 # The key material only ever exists in /run (tmpfs) and is shredded
 # after the binding is in place.
 
-- name: Unmount the mountpoint if mounted
+# Unmount and close by what is live, not by detect.yml's facts: by now
+# they can be stale.  main.yml opens a healthy volume through the TPM
+# before a forced format (rushwilt_luks_sd_format on a card detect.yml
+# saw closed, e.g. right after an OS reinstall), and the legacy-name
+# migration re-opens it after the state was read; an open mapper makes
+# wipefs fail with "Device or resource busy".
+- name: Unmount the mountpoint if it is mounted from the volume
   ansible.builtin.shell:
-    cmd: while mountpoint -q {{ rushwilt_luks_sd_mountpoint }}; do umount {{ rushwilt_luks_sd_mountpoint }} || break; done
-  when: rushwilt_luks_sd_mounted
-  changed_when: true
+    cmd: >-
+      if [ "$(findmnt -n -o SOURCE {{ rushwilt_luks_sd_mountpoint }} | sort -u)" = /dev/mapper/{{ rushwilt_luks_sd_mapper }} ]; then
+        while mountpoint -q {{ rushwilt_luks_sd_mountpoint }}; do umount {{ rushwilt_luks_sd_mountpoint }} || exit 1; done;
+        echo unmounted;
+      fi
+  register: luks_sd_unmount
+  changed_when: "'unmounted' in luks_sd_unmount.stdout"
 
-- name: Close the LUKS mapper if open
+- name: Close the LUKS mapper if it is open on the card
   ansible.builtin.shell:
-    cmd: cryptsetup close /dev/mapper/{{ rushwilt_luks_sd_mapper }}
-  when: rushwilt_luks_sd_open
-  changed_when: true
+    cmd: >-
+      if cryptsetup status /dev/mapper/{{ rushwilt_luks_sd_mapper }} 2>/dev/null
+      | grep -qF {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}; then
+        cryptsetup close {{ rushwilt_luks_sd_mapper }} && echo closed;
+      fi
+  register: luks_sd_close
+  changed_when: "'closed' in luks_sd_close.stdout"
 
 - name: Record the active mount sources
   ansible.builtin.shell:

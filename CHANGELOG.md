@@ -2,7 +2,7 @@
 
 All notable changes to the `rushwilt.pi` collection.
 
-## Unreleased
+## 1.3.2 — 2026-11-17
 
 ### Fixed
 

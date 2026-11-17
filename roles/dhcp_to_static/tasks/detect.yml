@@ -196,10 +196,12 @@
   loop: "{{ dhcp_to_static_leases | dict2items }}"
   when: item.key is not match(dhcp_to_static_exclude)
 
+# Empty when every leased interface is excluded (the loop above then
+# sets nothing).
 - name: Keep only the interfaces a supported backend still hands to DHCP
   ansible.builtin.set_fact:
     dhcp_to_static_targets: >-
-      {{ dhcp_to_static_targets | dict2items
+      {{ dhcp_to_static_targets | default({}) | dict2items
          | rejectattr('value', 'none') | rushwilt.pi.dict_from_items }}
 
 - name: Index the leased interfaces this role will not touch

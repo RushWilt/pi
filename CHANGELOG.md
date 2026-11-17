@@ -2,6 +2,14 @@
 
 All notable changes to the `rushwilt.pi` collection.
 
+## Unreleased
+
+### Fixed
+
+- **dhcp_to_static** — a `dhcp_to_static_exclude` that matches every
+  leased interface failed with "'dhcp_to_static_targets' is undefined";
+  it is now the documented clean no-op.
+
 ## 1.3.1 — 2026-10-20
 
 ### Fixed

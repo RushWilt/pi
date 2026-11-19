@@ -28,7 +28,11 @@ and unlocked automatically at boot.
 A rebuild: unmounts and closes the volume, wipes all signatures, writes one
 GPT partition, creates the LUKS2 volume (aes-xts-plain64, 512-bit key),
 seals the key to the TPM, verifies the binding is a tpm2 binding, opens the
-volume, and creates the filesystem inside it.
+volume, and creates the filesystem inside it. With
+`rushwilt_luks_sd_whole_device: false` it wipes only the volume's partition
+and leaves the partition table and the other partitions alone: the volume
+then sits beside the system on a one-disk Pi (e.g. partition 3 of an SD
+card split by FreshPi's `--root-size`).
 
 ## Requirements
 
@@ -37,8 +41,9 @@ volume, and creates the filesystem inside it.
   `/dev/tpm0`; on a fresh OS the tpm role reboots the board in place
   (`rushwilt_tpm_auto_reboot`, default `true`) and this role continues in
   the same run
-- an SD card on `/dev/mmcblk0` that does not host the system (checked
-  before anything is wiped)
+- an SD card on `/dev/mmcblk0` that does not host the system, or with
+  `rushwilt_luks_sd_whole_device: false` an existing partition that is not
+  mounted (checked before anything is wiped; the role never creates it)
 - `become: true`
 - check mode is not meaningful: the rebuild path is destructive and the
   state checks assume a live system.
@@ -47,7 +52,9 @@ volume, and creates the filesystem inside it.
 
 | Variable                      | Default          | Purpose                                                        |
 |-------------------------------|------------------|----------------------------------------------------------------|
-| `rushwilt_luks_sd_device`     | `/dev/mmcblk0`   | the SD card; its partition table is rewritten                  |
+| `rushwilt_luks_sd_device`     | `/dev/mmcblk0`   | the SD card; its partition table is rewritten (whole device only) |
+| `rushwilt_luks_sd_partition`  | `1`              | partition number of the volume                                 |
+| `rushwilt_luks_sd_whole_device` | `true`         | the volume owns the whole device; `false`: use the existing partition only |
 | `rushwilt_luks_sd_mapper`     | derived from the mountpoint (path separators become `_`); overrides the derivation | device-mapper name the volume is opened under |
 | `rushwilt_luks_sd_mountpoint` | `/opt`             | mountpoint of the volume                                       |
 | `rushwilt_luks_sd_fs`         | `ext4`           | filesystem created inside the volume                           |

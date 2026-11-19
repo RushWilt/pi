@@ -1,11 +1,19 @@
 ---
-# The SD card that backs the LUKS data volume.  The role rewrites the
-# partition table on this device, so it must not host the system
-# (checked in tasks/rebuild.yml before anything is wiped).
+# The SD card that backs the LUKS data volume.  With
+# rushwilt_luks_sd_whole_device the role rewrites the partition table on
+# this device, so nothing on it may be mounted (checked in
+# tasks/rebuild.yml before anything is wiped).
 rushwilt_luks_sd_device: /dev/mmcblk0
 
 # Partition number of the LUKS volume on that device.
 rushwilt_luks_sd_partition: 1
+
+# true: the volume owns the whole device; a rebuild writes a fresh GPT
+# table with partition 1 only.  false: the partition already exists
+# beside others (e.g. the system's, on a one-disk Pi split by FreshPi's
+# --root-size); a rebuild wipes that partition only, never the table,
+# and the role refuses to run if the partition is missing.
+rushwilt_luks_sd_whole_device: true
 
 # The mountpoint the volume is exposed at, and the device-mapper name
 # it is opened under: the mapper name follows from the mountpoint

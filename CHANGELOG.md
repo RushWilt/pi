@@ -2,6 +2,17 @@
 
 All notable changes to the `rushwilt.pi` collection.
 
+## 1.4.0 — 2026-11-19
+
+### Added
+
+- **luks_sd_tpm** — `rushwilt_luks_sd_whole_device: false` uses an
+  existing partition (`rushwilt_luks_sd_partition`) beside others, e.g.
+  partition 3 of an SD card that also holds the system (FreshPi's
+  `--root-size`). A rebuild wipes that partition only and never rewrites
+  the partition table; the role refuses to run if the partition is
+  missing or mounted. The default (`true`) is unchanged.
+
 ## 1.3.2 — 2026-11-17
 
 ### Fixed

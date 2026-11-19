@@ -37,6 +37,17 @@
       the LUKS data volume has no backing card.
   when: not luks_sd_dev.stat.exists
 
+- name: Refuse to run without the volume's partition
+  ansible.builtin.fail:
+    msg: >-
+      {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }} does not
+      exist; with rushwilt_luks_sd_whole_device false the role uses that
+      partition as it is and never creates one (e.g. register the Pi with
+      FreshPi's --root-size and blat it).
+  when:
+    - not (rushwilt_luks_sd_whole_device | bool)
+    - not luks_sd_part.stat.exists
+
 - name: Refuse to run without a live TPM
   ansible.builtin.fail:
     msg: >-

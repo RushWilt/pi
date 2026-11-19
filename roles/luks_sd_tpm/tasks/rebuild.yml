@@ -1,6 +1,7 @@
 ---
-# Wipe the SD card and create the LUKS volume fresh:
-#   * one GPT partition on the card,
+# Wipe the SD card (or, with rushwilt_luks_sd_whole_device false, only
+# the volume's partition) and create the LUKS volume fresh:
+#   * one GPT partition on the card (whole device only),
 #   * a LUKS2 volume whose keyslot key is a strong random 64-byte
 #     string from /dev/urandom,
 #   * a clevis tpm2 binding that seals that key to the board TPM
@@ -41,29 +42,33 @@
   register: active_mount_sources
   changed_when: false
 
-- name: Abort if anything is mounted from the SD card
+# The whole card, or just the volume's partition beside the system's.
+- name: Abort if anything is mounted from what is about to be wiped
+  vars:
+    luks_sd_wipe_re: >-
+      {{ ('^' ~ rushwilt_luks_sd_device ~ '(p[0-9]+)?$')
+         if rushwilt_luks_sd_whole_device | bool
+         else ('^' ~ rushwilt_luks_sd_device ~ 'p' ~ rushwilt_luks_sd_partition ~ '$') }}
   ansible.builtin.fail:
     msg: >-
-      {{ active_mount_sources.stdout_lines
-         | select('match', '^' ~ rushwilt_luks_sd_device ~ '$|^' ~ rushwilt_luks_sd_device ~ 'p[0-9]+$')
-         | list }}
+      {{ active_mount_sources.stdout_lines | select('match', luks_sd_wipe_re) | list }}
       is a mount source;
-      refusing to wipe {{ rushwilt_luks_sd_device }}.
-  when: >-
-    active_mount_sources.stdout_lines
-    | select('match', '^' ~ rushwilt_luks_sd_device ~ '$|^' ~ rushwilt_luks_sd_device ~ 'p[0-9]+$')
-    | list
-    | length > 0
+      refusing to wipe {{ rushwilt_luks_sd_device
+        if rushwilt_luks_sd_whole_device | bool
+        else rushwilt_luks_sd_device ~ 'p' ~ rushwilt_luks_sd_partition }}.
+  when: active_mount_sources.stdout_lines | select('match', luks_sd_wipe_re) | list | length > 0
 
 - name: Wipe all filesystem and partition signatures from the card
   ansible.builtin.shell:
     cmd: wipefs -a {{ rushwilt_luks_sd_device }}
   changed_when: true
+  when: rushwilt_luks_sd_whole_device | bool
 
 - name: Create the GPT partition table with one primary partition
   ansible.builtin.shell:
     cmd: parted -s {{ rushwilt_luks_sd_device }} mklabel gpt mkpart primary 1MiB 100%
   changed_when: true
+  when: rushwilt_luks_sd_whole_device | bool
 
 - name: Wait for the kernel to expose the new partition
   ansible.builtin.shell:
@@ -75,6 +80,14 @@
       done;
       exit 1
   changed_when: false
+  when: rushwilt_luks_sd_whole_device | bool
+
+# The partition table and the other partitions stay as they are.
+- name: Wipe the signatures from the volume's partition
+  ansible.builtin.shell:
+    cmd: wipefs -a {{ rushwilt_luks_sd_device }}p{{ rushwilt_luks_sd_partition }}
+  changed_when: true
+  when: not (rushwilt_luks_sd_whole_device | bool)
 
 - name: Generate the 64-byte random LUKS key
   ansible.builtin.shell:
